@@ -1,5 +1,8 @@
 import os
 import pandas as pd
+"""
+this code match the stocks with their correpsponding financial report release date(FRDay) and combine them together
+"""
 
 # Define the base directories
 base_dir = '/Users/zw/Desktop/FinanceReport/FinanceReport'
