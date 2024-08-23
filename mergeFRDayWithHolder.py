@@ -1,6 +1,10 @@
 import pandas as pd
 from tqdm import tqdm
-
+"""
+this is the second part of the project which combine the date of financial report release with the released topten shareholders information, 
+we then filter out authentic foreign shareholder using namelists revealed by Chinese Securities Regulatory Commissions(CSRC). 
+the output is a matrix sorted by date and securities code that contains each stocks's share percentage held by foreign investors in time. 
+"""
 # Define file paths
 frday_file_path = '/Users/zw/Desktop/FinanceReport/FinanceReport/QFII/combined_FRDay.csv'
 topten1_file_path = '/Users/zw/Desktop/FinanceReport/FinanceReport/QFII/topten1.xlsx'
@@ -32,6 +36,9 @@ topten2_df.columns = ['SECU_NAME', 'Date', 'Holder_Name', 'Holder_Type', 'Share_
 combined_topten_df = pd.concat([topten1_df, topten2_df], ignore_index=True)
 
 # Merge the combined_topten_df with frday_df on 'Date' and 'SECU_CODE'
+"""
+notice right now the date indicates which seasons report it is, not the date it get released. 
+"""
 merged_df = pd.merge(combined_topten_df, frday_df, on=['Date', 'SECU_CODE'], how='left')
 
 # Fill missing values in merged_df with the corresponding FRDay data for the same ticker on the same date
@@ -41,11 +48,17 @@ for column in frday_columns:
     merged_df[column] = merged_df.groupby(['Date', 'SECU_CODE'])[column].transform(lambda x: x.ffill().bfill())
 
 # Replace "Date" column values with "FRDay" column values and rename "FRDay" to "Date"
+"""
+the replacement is important because it prevent future data leak. 
+"""
 if 'FRDay' in merged_df.columns:
     merged_df['Date'] = merged_df['FRDay']
     merged_df = merged_df.drop(columns=['FRDay'])
 
 # Remove "国际有限公司" characters
+"""
+remove any words like that because it appear the most frequent and would affect the accuracy of our filter
+"""
 chars_to_remove = "国际有限公司"
 
 # Preprocess the Holder_Name column to convert all non-string values to NaN
