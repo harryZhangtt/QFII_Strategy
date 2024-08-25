@@ -6,7 +6,12 @@ import numpy as np
 import matplotlib.dates as mdates
 from sklearn.linear_model import LinearRegression
 from statsmodels.robust.scale import mad
+"""
+this is the third part of the project. The first and second step construct the matrix sorted by date and ticker name that contains each stocks's share percentage held by foreign investors. 
 
+on this QFIIProcessor class, we combine this dataframe with price and volume dataframe we constructed through previous project, and then we construct our QFII strategy as taking the top 1/3 of 
+stocks invested by foreign investors(Market Cap weighted). The strategy is backtested and examined detailed(shown on the report on QFII strategy)
+"""
 
 
 class QFIIProcessor:
@@ -33,7 +38,9 @@ class QFIIProcessor:
         # Assumes the date is in YYYYMMDD format somewhere in the filename
         date_str = ''.join(filter(str.isdigit, filename))
         return pd.to_datetime(date_str, format='%Y%m%d')
-
+    """
+    load price and volume data
+    """
     def load_qp_data(self):
         qp_files = self.get_sorted_files(self.qp_folder_path, 'merged')[2912:]
         # qp_files = self.get_sorted_files(self.qp_folder_path, 'merged')[3400:3700]
@@ -54,7 +61,9 @@ class QFIIProcessor:
         qp_merged_df = qp_merged_df.sort_values(by=['Date', 'SECU_CODE'])
 
         return qp_merged_df
-
+    """
+    load share percentage data(percentage held by foreign investors) 
+    """
     def load_data(self):
         self.percentage_df = pd.read_csv(self.percentage_file_path, encoding='utf-8')
 
@@ -90,7 +99,10 @@ class QFIIProcessor:
 
         return final_df
 
-
+    """
+    this function here is tricky as well because share percentage df and qp data don't share the same time series( due to the infrequent nature of financial report),
+    therefore, after merge, ffill is important
+    """
     def map_and_fill(self, final_df):
         # Set multi-index for mapping
         self.percentage_df.set_index(['Date', 'SECU_CODE'], inplace=True)
@@ -130,7 +142,9 @@ class QFIIProcessor:
 
         print(self.mapped_df.columns)
         print(self.mapped_df)
-
+    """
+    in this strategy, the stocks pool is securites from Chinese CSI800 index, this function filter out stocks within the index
+    """
     def filter_CSI800(self):
         df = self.mapped_df.copy()
         df = df.sort_values(by=['Date', 'SECU_CODE'])
@@ -195,22 +209,27 @@ class QFIIProcessor:
         # Set the filtered DataFrame as the new mapped_df
         self.mapped_df = filtered_df.sort_values(by=['Date', 'SECU_CODE'])
         print(self.mapped_df)
-
+    """
+    the alpha value of QFII strategy is calculated as the ratio of amount of money foreign investors put on particular stocks 
+    and the total amount of money invested in Chinese A share stocks market(within CSI800)
+    """
     def calculate_weighted_price(self):
         df = self.mapped_df.copy()
         self.all_stocks=df
         df=df.sort_values(by=['Date','SECU_CODE'])
 
         """
-        when processing stocks, only consider stocks picked by QFII"""
-        df['Market_Cap'] =df['MvTotal_1']
+        when processing stocks, only consider stocks picked by QFII
         """
-        notice that QFII share is the amount of principle in that stocks"""
+        df['Market_Cap'] =df['MvTotal_1'
         df['QFII_SHARE'] = 0.01 * df['Share_Percentage'] * df['Market_Cap']
         df['QFII_ALPHA'] = df['QFII_SHARE'] / df.groupby('Date')['QFII_SHARE'].transform('sum')
         df['next_day_return'] = df.groupby('SECU_CODE')['ADJ_CLOSE_PRICE'].diff()
         df['next_day_return'] = df['next_day_return'].fillna(0)
-
+        """
+        this filter can reduce amount of work done significantly because it reduce the size of the matrix, however, this should be done 
+        after the calculation of next_day_return to avoid missing data
+        """
         df = df[df['QFII_ALPHA'] > 0]
 
 
@@ -234,6 +253,10 @@ class QFIIProcessor:
 
             # Define masks for long investments based on the top 1/3 quantile
             def normalize_weights(group):
+                """
+                pick top 1/3 of stocks invested by foreign investors(market cap weighted), normalized their weight 
+                to make sure they sum up to one
+                """
                 # Divide the data into 3 quantiles, dropping duplicates
                 group['quantile'] = pd.qcut(group['vector'], 3, labels=False, duplicates='drop')
 
@@ -261,7 +284,12 @@ class QFIIProcessor:
 
             # Calculate excess weight
             # Cap the weights at 0.1 and calculate excess weight within transform
-
+            """
+            for risk control, we want to ensure no tickers receive weight greater than 0.1, 
+            this is hard to achieve while maintaining weight sum of one, 
+            so the portfolio get rebalanced by distributing excess weight(those greater than 0.1) evenly to stocks 
+            that have weight less than 0.1
+            """
             for date, group in df.groupby('Date'):
                 if len(group) > 30:
                     # Copy the weight column to be adjusted
@@ -468,74 +496,7 @@ class QFIIProcessor:
 
             plot_combined_graphs(aggregated, df, initial_capital, value_factor)
 
-            # def grouping_analysis(df, output_path, value_factor):
-            #     # Sort the dataframe by vector and trading day for proper quantile grouping
-            #     df = df.sort_values(by=['Date', 'vector'])
-            #     # Only need to analyze the values that are not zero
-            #     df = df[df['vector'] != 0]
-            #
-            #     # Initialize a list to store average returns per day
-            #     average_returns_per_day_list = []
-            #
-            #     # Loop over each trading day to calculate daily average returns for each vector group
-            #     for trading_day in df['Date'].unique():
-            #         daily_df = df[df['Date'] == trading_day].copy()
-            #         daily_df['vector_group'] = pd.qcut(daily_df['vector'], q=50, labels=False, duplicates='drop')
-            #         daily_average_returns = daily_df.groupby('vector_group')['pct_return'].mean().reset_index()
-            #
-            #         daily_average_returns['Date'] = trading_day
-            #         average_returns_per_day_list.append(daily_average_returns)
-            #
-            #     # Concatenate the daily average returns into a single dataframe
-            #     average_returns_per_day = pd.concat(average_returns_per_day_list)
-            #     average_returns_per_day.set_index('Date', inplace=True)
-            #
-            #     # Calculate the overall average return for each vector group across all days
-            #     average_returns = average_returns_per_day.groupby('vector_group')['pct_return'].mean().reset_index()
-            #
-            #     # Rename columns for clarity
-            #     average_returns.columns = ['vector_group', 'average_return']
-            #     average_returns = average_returns.sort_values(by='vector_group', ascending=True)
-            #
-            #     # Calculate size exposure by dividing the data into 10 size groups and calculating average capital allocation
-            #     df['size_group'] = pd.qcut(df['TOTALVALUE'], q=10, labels=False, duplicates='drop')
-            #     size_exposure = df.groupby('size_group')['long_capital_allocation'].sum().reset_index()
-            #     total_allocation = df['long_capital_allocation'].sum()
-            #     size_exposure['allocation_percentage'] = size_exposure['long_capital_allocation'] / total_allocation
-            #     size_exposure.columns = ['size_group', 'long_capital_allocation', 'allocation_percentage']
-            #     size_exposure = size_exposure.sort_values(by='size_group', ascending=True)
-            #
-            #     # Calculate industry exposure as percentage of the total allocation within each industry
-            #     industry_exposure = df.groupby('industry')['long_capital_allocation'].sum().reset_index()
-            #     industry_exposure['allocation_percentage'] = industry_exposure[
-            #                                                      'long_capital_allocation'] / total_allocation
-            #     industry_exposure.columns = ['industry', 'long_capital_allocation', 'allocation_percentage']
-            #     industry_exposure = industry_exposure.sort_values(by='allocation_percentage', ascending=False)
-            #
-            #     # Create subplots
-            #     fig, axs = plt.subplots(3, 1, figsize=(14, 15))
-            #
-            #     # Plotting average returns
-            #     axs[0].bar(average_returns['vector_group'], average_returns['average_return'], color='b', alpha=0.6)
-            #     axs[0].set_xlabel('Vector Group', fontsize='small')
-            #     axs[0].set_ylabel('Average Return', fontsize='small')
-            #     axs[0].set_title('Average Return by Vector Group', fontsize='small')
-            #     axs[0].grid(True)
-            #
-            #     # Plotting size allocation percentages as a pie chart
-            #     axs[1].pie(size_exposure['allocation_percentage'], labels=size_exposure['size_group'],
-            #                autopct='%1.1f%%', colors=plt.cm.tab20.colors)
-            #     axs[1].set_title('Capital Allocation by Size Group', fontsize='small')
-            #
-            #     # Plotting industry allocation percentages as a pie chart
-            #     axs[2].pie(industry_exposure['allocation_percentage'], labels=industry_exposure['industry'],
-            #                autopct='%1.1f%%', colors=plt.cm.tab20.colors)
-            #     axs[2].set_title('Capital Allocation by Industry', fontsize='small')
-            #
-            #     # Save the plots
-            #     plt.tight_layout()
-            #     plt.savefig(f'{output_path}/{value_factor}_grouping.png')
-            #     plt.close(fig)
+           
             def grouping_analysis(df, output_path, value_factor):
                 # Sort the dataframe by vector and trading day for proper quantile grouping
                 df = df.sort_values(by=['Date', 'vector'])
