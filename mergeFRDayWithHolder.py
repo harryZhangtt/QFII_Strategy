@@ -45,6 +45,9 @@ merged_df = pd.merge(combined_topten_df, frday_df, on=['Date', 'SECU_CODE'], how
 frday_columns = frday_df.columns.difference(['Date', 'SECU_CODE'])
 
 for column in frday_columns:
+    """
+    for particular date for particular ticker, there are multiple shareholders, and therefore besides 
+    """
     merged_df[column] = merged_df.groupby(['Date', 'SECU_CODE'])[column].transform(lambda x: x.ffill().bfill())
 
 # Replace "Date" column values with "FRDay" column values and rename "FRDay" to "Date"
