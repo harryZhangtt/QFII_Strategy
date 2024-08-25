@@ -46,7 +46,8 @@ frday_columns = frday_df.columns.difference(['Date', 'SECU_CODE'])
 
 for column in frday_columns:
     """
-    for particular date for particular ticker, there are multiple shareholders, and therefore besides 
+    for particular date for particular ticker, there are multiple shareholders. Therefore, after mapped onto date and secu_code, FRDay get lots of nan, and we should use forward filling
+    (for safety, plus backward filling) to handle this
     """
     merged_df[column] = merged_df.groupby(['Date', 'SECU_CODE'])[column].transform(lambda x: x.ffill().bfill())
 
